@@ -1,0 +1,4 @@
+.pio
+CMakeListsPrivate.txt
+cmake-build-debug
+cmake-build-lolin_d32
