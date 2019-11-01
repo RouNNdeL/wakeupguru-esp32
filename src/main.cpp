@@ -2,11 +2,13 @@
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <BLEServer.h>
+#include <Jq6500Serial.h>
 #include "config.h"
 #include "alarm_utils.h"
 
 alarm_entry alarms[MAX_ALARM_COUNT];
 uint8_t new_alarm;
+Jq6500Serial mp3(PIN_AUDIO_TX, PIN_AUDIO_RX); // NOLINT(cert-err58-cpp)
 
 class AlarmCharacteristicCallbacks : public BLECharacteristicCallbacks {
 public:
@@ -21,6 +23,31 @@ public:
             memset(alarms, 0, sizeof(alarms));
             memcpy(alarms, data, min(sizeof(alarms), size));
             new_alarm = 1;
+        }
+    }
+};
+
+class AudioCharacteristicCallbacks : public BLECharacteristicCallbacks {
+public:
+    void onRead(BLECharacteristic *pCharacteristic) override {
+        PRINTLN(pCharacteristic->getUUID().toString().c_str() + String(" has been read from"));
+    }
+
+    void onWrite(BLECharacteristic *pCharacteristic) override {
+        if(!strcmp(pCharacteristic->getUUID().toString().c_str(), BLE_CHARACTERISTIC_CONTROL_UUID)) {
+            uint8_t *data = pCharacteristic->getData();
+            if(data[0]) {
+                digitalWrite(PIN_AUDIO_OFF, 1);
+                delay(400);
+                mp3.play();
+            } else {
+                mp3.pause();
+                delay(50);
+                digitalWrite(PIN_AUDIO_OFF, 0);
+            }
+
+            ledcWrite(LED_PWM_CHANNEL, data[1]);
+            ledcWrite(VIBRATOR_PWM_CHANNEL, data[2]);
         }
     }
 };
@@ -44,6 +71,18 @@ void setup() {
     PRINTLN("|-- Version Name: " + String(VERSION_NAME));
     PRINTLN("|-- BLE Name: " + String(BLE_NAME));
 
+    pinMode(PIN_AUDIO_OFF, OUTPUT);
+
+    digitalWrite(PIN_AUDIO_OFF, 0);
+
+    ledcSetup(LED_PWM_CHANNEL, LED_PWM_FREQ, 8);
+    ledcAttachPin(PIN_LED, LED_PWM_CHANNEL);
+    ledcWrite(LED_PWM_CHANNEL, 0);
+
+    ledcSetup(VIBRATOR_PWM_CHANNEL, VIBRATOR_PWM_FREQ, 8);
+    ledcAttachPin(PIN_VIBRATOR, VIBRATOR_PWM_CHANNEL);
+    ledcWrite(VIBRATOR_PWM_CHANNEL, 0);
+
     BLEDevice::init(BLE_NAME);
     BLEServer *bleServer = BLEDevice::createServer();
     BLEService *alarmService = bleServer->createService(BLE_SERVICE_ALARM_UUID);
@@ -54,9 +93,20 @@ void setup() {
     );
 
     alarmCharacteristic->setCallbacks(new AlarmCharacteristicCallbacks());
+    BLEService *audioService = bleServer->createService(BLE_SERVICE_CONTROL_UUID);
+    BLECharacteristic *audioCharacteristic = audioService->createCharacteristic(
+            BLE_CHARACTERISTIC_CONTROL_UUID,
+            BLECharacteristic::PROPERTY_READ |
+            BLECharacteristic::PROPERTY_WRITE
+    );
+
+    alarmCharacteristic->setCallbacks(new AlarmCharacteristicCallbacks());
+    audioCharacteristic->setCallbacks(new AudioCharacteristicCallbacks());
+
     bleServer->setCallbacks(new ServerCallbacks());
 
     alarmService->start();
+    audioService->start();
 
     BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(BLE_SERVICE_ALARM_UUID);
@@ -65,6 +115,8 @@ void setup() {
     pAdvertising->setMinInterval(0x0128);
     pAdvertising->setMaxInterval(0x0160);
     BLEDevice::startAdvertising();
+
+    mp3.begin();
 }
 
 void loop() {
