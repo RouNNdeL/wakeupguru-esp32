@@ -37,7 +37,7 @@ public:
     }
 };
 
-class AudioCharacteristicCallbacks : public BLECharacteristicCallbacks {
+class ControlCharacteristicCallbacks : public BLECharacteristicCallbacks {
 public:
     void onRead(BLECharacteristic *pCharacteristic) override {
         PRINTLN(pCharacteristic->getUUID().toString().c_str() + String(" has been read from"));
@@ -112,20 +112,20 @@ void setup() {
     );
 
     alarmCharacteristic->setCallbacks(new AlarmCharacteristicCallbacks());
-    BLEService *audioService = bleServer->createService(BLE_SERVICE_CONTROL_UUID);
-    BLECharacteristic *audioCharacteristic = audioService->createCharacteristic(
+    BLEService *controlService = bleServer->createService(BLE_SERVICE_CONTROL_UUID);
+    BLECharacteristic *controlCharacteristic = controlService->createCharacteristic(
             BLE_CHARACTERISTIC_CONTROL_UUID,
             BLECharacteristic::PROPERTY_READ |
             BLECharacteristic::PROPERTY_WRITE
     );
 
     alarmCharacteristic->setCallbacks(new AlarmCharacteristicCallbacks());
-    audioCharacteristic->setCallbacks(new AudioCharacteristicCallbacks());
+    controlCharacteristic->setCallbacks(new ControlCharacteristicCallbacks());
 
     bleServer->setCallbacks(new ServerCallbacks());
 
     alarmService->start();
-    audioService->start();
+    controlService->start();
 
     BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(BLE_SERVICE_ALARM_UUID);
