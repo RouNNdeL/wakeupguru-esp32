@@ -111,7 +111,6 @@ void setup() {
             BLECharacteristic::PROPERTY_WRITE
     );
 
-    alarmCharacteristic->setCallbacks(new AlarmCharacteristicCallbacks());
     BLEService *controlService = bleServer->createService(BLE_SERVICE_CONTROL_UUID);
     BLECharacteristic *controlCharacteristic = controlService->createCharacteristic(
             BLE_CHARACTERISTIC_CONTROL_UUID,
