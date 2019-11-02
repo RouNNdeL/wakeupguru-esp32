@@ -3,12 +3,22 @@
 #include <BLEUtils.h>
 #include <BLEServer.h>
 #include <Jq6500Serial.h>
+#include <U8g2lib.h>
+#include <sys/time.h>
 #include "config.h"
 #include "alarm_utils.h"
 
 alarm_entry alarms[MAX_ALARM_COUNT];
 uint8_t new_alarm;
-Jq6500Serial mp3(PIN_AUDIO_TX, PIN_AUDIO_RX); // NOLINT(cert-err58-cpp)
+Jq6500Serial mp3(PIN_AUDIO_TX, PIN_AUDIO_RX);
+U8G2_SSD1306_128X32_UNIVISION_F_SW_I2C u8g2(U8G2_R2, PIN_OLED_SCK, PIN_OLED_SCL);
+
+String display_lines[4] = {
+        "BT: Disconnected",
+        "Audio: OFF",
+        "LED: 0%",
+        "Motor: 0%"
+};
 
 class AlarmCharacteristicCallbacks : public BLECharacteristicCallbacks {
 public:
@@ -36,18 +46,25 @@ public:
     void onWrite(BLECharacteristic *pCharacteristic) override {
         if(!strcmp(pCharacteristic->getUUID().toString().c_str(), BLE_CHARACTERISTIC_CONTROL_UUID)) {
             uint8_t *data = pCharacteristic->getData();
+
+            uint8_t brightness = data[1] * data[1] / UINT8_MAX;
+            ledcWrite(LED_PWM_CHANNEL, brightness);
+            ledcWrite(VIBRATOR_PWM_CHANNEL, data[2]);
+
+            display_lines[2] = "LED: " + String(data[1] * 100 / 255) + "%";
+            display_lines[3] = "Motor: " + String(data[2] * 100 / 255) + "%";
+
             if(data[0]) {
+                display_lines[1] = "Audio: ON";
                 digitalWrite(PIN_AUDIO_OFF, 1);
                 delay(400);
                 mp3.play();
             } else {
+                display_lines[1] = "Audio: OFF";
                 mp3.pause();
                 delay(50);
                 digitalWrite(PIN_AUDIO_OFF, 0);
             }
-
-            ledcWrite(LED_PWM_CHANNEL, data[1]);
-            ledcWrite(VIBRATOR_PWM_CHANNEL, data[2]);
         }
     }
 };
@@ -56,10 +73,12 @@ class ServerCallbacks : public BLEServerCallbacks {
 public:
     void onConnect(BLEServer *pServer) override {
         PRINTLN("Device connected");
+        display_lines[0] = "BT: Connected";
     }
 
     void onDisconnect(BLEServer *pServer) override {
         PRINTLN("Device disconnected");
+        display_lines[0] = "BT: Disconnected";
     }
 };
 
@@ -117,6 +136,7 @@ void setup() {
     BLEDevice::startAdvertising();
 
     mp3.begin();
+    u8g2.begin();
 }
 
 void loop() {
@@ -124,9 +144,17 @@ void loop() {
         new_alarm = 0;
         PRINTLN("Alarms in memory:");
         for(int i = 0; i < MAX_ALARM_COUNT; ++i) {
-            PRINTLN(String(i) +": " + formatAlarmAsString(alarms[i]));
+            PRINTLN(String(i) + ": " + formatAlarmAsString(alarms[i]));
         }
         PRINTLN("");
     }
     delay(10);
+
+    u8g2.clearBuffer();
+    u8g2.setFont(u8g2_font_pxplustandynewtv_8f);
+    u8g2.drawStr(0, 7, display_lines[0].c_str());
+    u8g2.drawStr(0, 16, display_lines[1].c_str());
+    u8g2.drawStr(0, 24, display_lines[2].c_str());
+    u8g2.drawStr(0, 32, display_lines[3].c_str());
+    u8g2.sendBuffer();
 }
