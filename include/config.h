@@ -16,9 +16,11 @@
 #define PIN_AUDIO_TX 18
 #define PIN_LED 13
 #define PIN_VIBRATOR 14
-#define PIN_OLED_SCL 4
-#define PIN_OLED_SCK 16
+#define PIN_OLED_SDA 4
+#define PIN_OLED_SCL 16
 #define PIN_BTN 12
+#define PIN_SLEEP 27
+#define PIN_DEBUG 25
 
 #define LED_PWM_FREQ 20000
 #define LED_PWM_CHANNEL 0

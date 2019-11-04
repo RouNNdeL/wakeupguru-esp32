@@ -5,24 +5,31 @@
 #include <Jq6500Serial.h>
 #include <U8g2lib.h>
 #include <sys/time.h>
+#include <Wire.h>
+#include <RtcDS1307.h>
 #include "config.h"
 #include "alarm_utils.h"
+
+RtcDS1307<TwoWire> rtc(Wire);
 
 extern "C" {
 #include "time_utils.h"
 }
 
-alarm_entry alarms[MAX_ALARM_COUNT];
+RTC_DATA_ATTR alarm_entry alarms[MAX_ALARM_COUNT];
 uint8_t new_alarm;
 Jq6500Serial mp3(PIN_AUDIO_TX, PIN_AUDIO_RX);
-U8G2_SSD1306_128X32_UNIVISION_F_SW_I2C u8g2(U8G2_R2, PIN_OLED_SCK, PIN_OLED_SCL);
+U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2(U8G2_R2, U8X8_PIN_NONE, PIN_OLED_SCL, PIN_OLED_SDA);
 
 #define DISPLAY_MODE_COUNT 2
 
 #define DISPLAY_MODE_STATUS 0
 #define DISPLAY_MODE_TIME 1
 
-uint8_t display_mode = DISPLAY_MODE_STATUS;
+RTC_DATA_ATTR uint8_t display_mode = DISPLAY_MODE_STATUS;
+
+#define FLAG_UPDATE_RTC (1 << 0)
+uint8_t flags;
 
 String display_status_lines[4] = {
         "BT: Disconnected",
@@ -110,8 +117,7 @@ public:
             timezone tz = {0, 0};
             settimeofday(&tv, &tz);
 
-            Serial.println("Setting time of day");
-            Serial.println(tv.tv_sec);
+            flags |= FLAG_UPDATE_RTC;
         }
     }
 };
@@ -143,8 +149,11 @@ void setup() {
 
     pinMode(PIN_AUDIO_OFF, OUTPUT);
     pinMode(PIN_BTN, INPUT_PULLUP);
+    pinMode(PIN_SLEEP, INPUT_PULLUP);
+    pinMode(PIN_DEBUG, OUTPUT);
 
     digitalWrite(PIN_AUDIO_OFF, 0);
+    digitalWrite(PIN_DEBUG, 0);
 
     ledcSetup(LED_PWM_CHANNEL, LED_PWM_FREQ, 8);
     ledcAttachPin(PIN_LED, LED_PWM_CHANNEL);
@@ -200,9 +209,64 @@ void setup() {
     u8g2.begin();
 
     attachInterrupt(PIN_BTN, change_display_mode, FALLING);
+
+    esp_sleep_enable_timer_wakeup(60 * 1000000);
+
+    if(!rtc.IsDateTimeValid()) {
+        if(rtc.LastError() == 0) {
+            rtc.SetDateTime(0);
+        }
+    }
+
+    if(!rtc.GetIsRunning()) {
+        rtc.SetIsRunning(true);
+    }
+
+    RtcDateTime n = rtc.GetDateTime();
+    time_t t = n.Epoch32Time();
+    timeval tv = {t, 0};
+
+    timezone tz = {0, 0};
+    settimeofday(&tv, &tz);
 }
 
 void loop() {
+    delay(10);
+
+    if(flags & FLAG_UPDATE_RTC) {
+        timeval tv;
+        timezone tz;
+        gettimeofday(&tv, &tz);
+
+        RtcDateTime dt = RtcDateTime();
+        dt.InitWithEpoch32Time(tv.tv_sec);
+        rtc.SetDateTime(dt);
+
+        flags &= ~FLAG_UPDATE_RTC;
+    }
+
+    if(!digitalRead(PIN_SLEEP)) {
+        tm *time;
+        timeval tv;
+        timezone tz;
+
+        gettimeofday(&tv, &tz);
+        timeval_to_tm(&time, &tv);
+
+        char t[10];
+        strftime(t, 10, "%H:%M:%S", time);
+
+        u8g2.clearBuffer();
+        u8g2.setFont(u8g2_font_crox3hb_tr);
+        u8g2.drawStr(0, 12, "In Deep Sleep");
+        u8g2.setFont(u8g2_font_pxplustandynewtv_8f);
+        u8g2.drawStr(0, 24, "Since:");
+        u8g2.drawStr(0, 32, t);
+        u8g2.sendBuffer();
+
+        esp_deep_sleep_start();
+    }
+
     if(new_alarm) {
         new_alarm = 0;
         PRINTLN("Alarms in memory:");
@@ -212,7 +276,6 @@ void loop() {
         }
         PRINTLN("");
     }
-    delay(10);
 
     switch(display_mode) {
         case DISPLAY_MODE_STATUS:
