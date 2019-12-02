@@ -43,4 +43,8 @@ String formatAlarmAsString(alarm_entry alarm);
 
 String dayOfWeek(uint8_t day);
 
+time_t get_next_alarm_entry(alarm_entry* alarm, tm current, alarm_entry *alarms, uint8_t count);
+
+time_t get_next_alarm(tm c_tm, alarm_entry alarm);
+
 #endif //WAKEUPGURU_ALARM_UTILS_H

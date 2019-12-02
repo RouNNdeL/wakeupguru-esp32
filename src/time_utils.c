@@ -2,6 +2,7 @@
 // Created by Krzysiek on 2019-11-02.
 //
 
+#include <inttypes.h>
 #include "time_utils.h"
 
 void ble_time_to_tm(struct tm *tm, ble_time *time) {
@@ -45,4 +46,14 @@ void timeval_to_ble(ble_time *ble, struct timeval *tv) {
     struct tm *tm;
     timeval_to_tm(&tm, tv);
     tm_to_ble_time(ble, tm, tv->tv_usec * UINT8_MAX / 1000000);
+}
+
+uint8_t get_current_week(struct tm tm) {
+    char str[2];
+    uint8_t num;
+
+    strftime(str, 2, "%V", &tm);
+    sscanf(str, "%2hhu", &num);
+
+    return num;
 }

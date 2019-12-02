@@ -21,10 +21,11 @@ uint8_t new_alarm;
 Jq6500Serial mp3(PIN_AUDIO_TX, PIN_AUDIO_RX);
 U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2(U8G2_R2, U8X8_PIN_NONE, PIN_OLED_SCL, PIN_OLED_SDA);
 
-#define DISPLAY_MODE_COUNT 2
+#define DISPLAY_MODE_COUNT 3
 
 #define DISPLAY_MODE_STATUS 0
 #define DISPLAY_MODE_TIME 1
+#define DISPLAY_MODE_NEXT_ALARM 2
 
 RTC_DATA_ATTR uint8_t display_mode = DISPLAY_MODE_STATUS;
 
@@ -278,6 +279,35 @@ void loop() {
     }
 
     switch(display_mode) {
+        case DISPLAY_MODE_NEXT_ALARM: {
+            tm *time;
+            timeval tv;
+            timezone tz;
+
+            gettimeofday(&tv, &tz);
+            timeval_to_tm(&time, &tv);
+
+            alarm_entry entry;
+
+            time_t alarm_time = get_next_alarm_entry(&entry, *time, alarms, MAX_ALARM_COUNT);
+            time_t diff = alarm_time - tv.tv_sec;
+            uint8_t days = diff / (24 * 60 * 60);
+            uint8_t hours = (diff / (60 * 60)) % 24;
+            uint8_t minutes = (diff / 60) % 60;
+            uint8_t seconds = diff % 60;
+
+            char format[24];
+            sprintf(format, "%d days, %d:%02d:%02d", days, hours, minutes, seconds);
+
+            u8g2.clearBuffer();
+            u8g2.setFont(u8g2_font_pxplustandynewtv_8r);
+            u8g2.drawStr(0, 9, "Next alarm");
+            u8g2.drawStr(0, 18, format);
+            u8g2.drawStr(0, 27, formatAlarmAsString(entry).c_str());
+            u8g2.sendBuffer();
+
+            break;
+        }
         case DISPLAY_MODE_STATUS:
             u8g2.clearBuffer();
             u8g2.setFont(u8g2_font_pxplustandynewtv_8f);
@@ -287,7 +317,7 @@ void loop() {
             u8g2.drawStr(0, 32, display_status_lines[3].c_str());
             u8g2.sendBuffer();
             break;
-        case DISPLAY_MODE_TIME:
+        case DISPLAY_MODE_TIME: {
             tm *time;
             timeval tv;
             timezone tz;
@@ -309,5 +339,6 @@ void loop() {
             u8g2.drawStr(0, 30, String(d).c_str());
             u8g2.sendBuffer();
             break;
+        }
     }
 }
