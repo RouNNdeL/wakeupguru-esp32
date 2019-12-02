@@ -70,14 +70,14 @@ public:
             ledcWrite(LED_PWM_CHANNEL, brightness);
             ledcWrite(VIBRATOR_PWM_CHANNEL, data[2]);
 
-            display_status_lines[2] = "LED: " + String(data[1] * 100 / 255) + "%";
-            display_status_lines[3] = "Motor: " + String(data[2] * 100 / 255) + "%";
+            display_status_lines[2] = "LED: " + String(data[1] * 100 / UINT8_MAX) + "%";
+            display_status_lines[3] = "Motor: " + String(data[2] * 100 / UINT8_MAX) + "%";
 
             if(data[0]) {
-                display_status_lines[1] = "Audio: ON";
                 digitalWrite(PIN_AUDIO_OFF, 1);
                 delay(400);
                 mp3.play();
+                display_status_lines[1] = "Audio: ON";
             } else {
                 display_status_lines[1] = "Audio: OFF";
                 mp3.pause();
@@ -278,18 +278,39 @@ void loop() {
         PRINTLN("");
     }
 
+    tm *time;
+    timeval tv;
+    timezone tz;
+
+    gettimeofday(&tv, &tz);
+    timeval_to_tm(&time, &tv);
+
+    alarm_entry entry;
+
+    time_t alarm_time = get_next_alarm_entry(&entry, *time, alarms, MAX_ALARM_COUNT);
+
+    time_t sec_to_alarm = alarm_time - tv.tv_sec;
+    if(sec_to_alarm < ALARM_LIGHT_START_DELAY) {
+        uint8_t power = (ALARM_LIGHT_START_DELAY - sec_to_alarm) * UINT8_MAX / ALARM_LIGHT_START_DELAY;
+        display_status_lines[2] = "LED: " + String(power * 100 / UINT8_MAX) + "%";
+        ledcWrite(LED_PWM_CHANNEL, power);
+    }
+
+    if(sec_to_alarm < ALARM_VIBRATION_START_DELAY) {
+        uint8_t power = (ALARM_VIBRATION_START_DELAY - sec_to_alarm) * UINT8_MAX / ALARM_VIBRATION_START_DELAY;
+        display_status_lines[3] = "Motor: " + String(power * 100 / UINT8_MAX) + "%";
+        ledcWrite(VIBRATOR_PWM_CHANNEL, power);
+    }
+
+    if(sec_to_alarm == 1) {
+        digitalWrite(PIN_AUDIO_OFF, 1);
+    } else if(!sec_to_alarm) {
+        display_status_lines[1] = "Audio: ON";
+        mp3.play();
+    }
+
     switch(display_mode) {
         case DISPLAY_MODE_NEXT_ALARM: {
-            tm *time;
-            timeval tv;
-            timezone tz;
-
-            gettimeofday(&tv, &tz);
-            timeval_to_tm(&time, &tv);
-
-            alarm_entry entry;
-
-            time_t alarm_time = get_next_alarm_entry(&entry, *time, alarms, MAX_ALARM_COUNT);
             time_t diff = alarm_time - tv.tv_sec;
             uint8_t days = diff / (24 * 60 * 60);
             uint8_t hours = (diff / (60 * 60)) % 24;
@@ -308,7 +329,7 @@ void loop() {
 
             break;
         }
-        case DISPLAY_MODE_STATUS:
+        case DISPLAY_MODE_STATUS: {
             u8g2.clearBuffer();
             u8g2.setFont(u8g2_font_pxplustandynewtv_8f);
             u8g2.drawStr(0, 7, display_status_lines[0].c_str());
@@ -317,11 +338,8 @@ void loop() {
             u8g2.drawStr(0, 32, display_status_lines[3].c_str());
             u8g2.sendBuffer();
             break;
+        }
         case DISPLAY_MODE_TIME: {
-            tm *time;
-            timeval tv;
-            timezone tz;
-
             gettimeofday(&tv, &tz);
 
             timeval_to_tm(&time, &tv);

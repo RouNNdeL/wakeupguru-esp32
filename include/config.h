@@ -10,6 +10,8 @@
 #define BUILD_DATE (String(__TIME__) + "@" + __DATE__)
 
 #define MAX_ALARM_COUNT 12
+#define ALARM_LIGHT_START_DELAY 30
+#define ALARM_VIBRATION_START_DELAY 15
 
 #define PIN_AUDIO_OFF 23
 #define PIN_AUDIO_RX 19
